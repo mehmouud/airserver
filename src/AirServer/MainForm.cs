@@ -8,8 +8,10 @@ public sealed class MainForm : Form
     private readonly UxPlayHost _host = new();
     private readonly LogParser _parser = new();
     private readonly System.Windows.Forms.Timer _heartbeat = new() { Interval = 1000 };
+    private readonly NetworkWatcher _network = new();
     private DateTime _lastStats = DateTime.MinValue;
     private bool _mirroring;
+    private bool _restartPending;   // network changed while mirroring: restart once idle
     private bool _userStopped;
     private bool _exiting;
 
@@ -197,16 +199,36 @@ public sealed class MainForm : Form
                 _mirroring = false;
                 SetState(_host.IsRunning ? "En attente d'un iPhone" : "Arrêté", _host.IsRunning ? Color.SteelBlue : Color.Gray);
             }
+            if (_restartPending && !_mirroring) RestartForNetworkChange();
         };
         _heartbeat.Start();
+
+        // e.g. Mobile Hotspot switched on after launch: the engine must re-bind mDNS on the new interface
+        _network.Changed += () => BeginInvokeSafe(() =>
+        {
+            if (!_host.IsRunning) return;
+            AppendLog("[réseau modifié : " + NetworkWatcher.CurrentSignature() + "]");
+            _restartPending = true;
+            if (!_mirroring) RestartForNetworkChange();
+            else AppendLog("[redémarrage du récepteur reporté à la fin de la recopie]");
+        });
 
         Shown += (_, _) => { if (_settings.AutoStart) StartEngine(); };
         Resize += (_, _) => { if (WindowState == FormWindowState.Minimized) Hide(); };
         _tray.DoubleClick += (_, _) => RestoreFromTray();
-        FormClosing += (_, _) => { _heartbeat.Stop(); _host.Dispose(); _tray.Visible = false; };
+        FormClosing += (_, _) => { _heartbeat.Stop(); _network.Dispose(); _host.Dispose(); _tray.Visible = false; };
     }
 
-    private void StartEngine()
+    private void RestartForNetworkChange()
+    {
+        _restartPending = false;
+        if (!_host.IsRunning) return;
+        AppendLog("[redémarrage du récepteur pour publier AirPlay sur les nouvelles interfaces réseau]");
+        _host.Stop();
+        StartEngine(clearLog: false);
+    }
+
+    private void StartEngine(bool clearLog = true)
     {
         ReadUiIntoSettings();
         if (UxPlayHost.LocateEngine() is null)
@@ -216,14 +238,16 @@ public sealed class MainForm : Form
             return;
         }
         var (_, _, hz) = NativeMethods.PrimaryDisplayMode();
-        _log.Clear();
+        if (clearLog) _log.Clear();
         _stats.Items.Clear();
         _stream.Text = "Flux : —";
         _client.Text = "Client : —";
         _userStopped = false;
         try
         {
+            _network.Rebase();
             _host.Start(_settings.BuildArguments(hz));
+            AppendLog("[interfaces réseau : " + NetworkWatcher.CurrentSignature() + "]");
             SetState("En attente d'un iPhone", Color.SteelBlue);
             _startStop.Text = "Arrêter";
             SetSettingsEnabled(false);
@@ -247,6 +271,7 @@ public sealed class MainForm : Form
 
     private void OnEngineExited(int code)
     {
+        if (_host.IsRunning) return;   // exit of a previous engine, already replaced by a restart
         _mirroring = false;
         _startStop.Text = "Démarrer";
         _startStop.Enabled = true;
@@ -284,14 +309,15 @@ public sealed class MainForm : Form
     {
         var engine = UxPlayHost.LocateEngine();
         if (engine is null) { MessageBox.Show(this, "Moteur introuvable.", "AirServer"); return; }
-        const string rule = "AirServer (UxPlay)";
-        string args = $"/c netsh advfirewall firewall delete rule name=\"{rule}\" >nul 2>&1 & " +
-                      $"netsh advfirewall firewall add rule name=\"{rule}\" dir=in action=allow program=\"{engine.Value.Exe}\" enable=yes profile=private,domain";
+        string enc = Firewall.EncodedCommand(Firewall.RulesScript(engine.Value.Exe));
         try
         {
-            using var p = Process.Start(new ProcessStartInfo("cmd.exe", args) { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden });
-            p?.WaitForExit(15000);
-            AppendLog(p?.ExitCode == 0 ? "[pare-feu] règle entrante ajoutée pour " + engine.Value.Exe : "[pare-feu] échec, code " + p?.ExitCode);
+            using var p = Process.Start(new ProcessStartInfo("powershell.exe", $"-NoProfile -EncodedCommand {enc}")
+                { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden });
+            p?.WaitForExit(30000);
+            AppendLog(p?.ExitCode == 0
+                ? $"[pare-feu] règles ajoutées (réseaux privés + point d'accès mobile {Firewall.HotspotSubnet}) pour {engine.Value.Exe}"
+                : "[pare-feu] échec, code " + p?.ExitCode);
         }
         catch (System.ComponentModel.Win32Exception) { AppendLog("[pare-feu] annulé par l'utilisateur"); }
     }

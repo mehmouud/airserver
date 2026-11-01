@@ -35,6 +35,7 @@ if len(sys.argv) > 2:   # optional: outgoing interface IPv4 (avoid VirtualBox/VP
 sock.bind(("", 0))
 sock.settimeout(0.5)
 found = set()
+a_records = set()
 deadline = time.time() + float(sys.argv[1] if len(sys.argv) > 1 else 4)
 for _ in range(3):
     sock.sendto(pkt, ("224.0.0.251", 5353))
@@ -53,7 +54,11 @@ while time.time() < deadline:
         if rtype == 12 and name in services:
             target, _ = read_name(data, off)
             found.add((addr[0], target))
+        elif rtype == 1 and rdlen == 4:
+            a_records.add((addr[0], name, socket.inet_ntoa(data[off:off + 4])))
         off += rdlen
 for ip, t in sorted(found):
     print(f"{ip}  {t}")
+for ip, host, a in sorted(a_records):
+    print(f"{ip}  A {host} -> {a}")
 print(f"{len(found)} service(s) found")

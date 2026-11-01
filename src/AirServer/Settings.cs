@@ -50,6 +50,7 @@ public sealed class Settings
     }
 
     /// <summary>(width, height, hevc) requested from the iPhone.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public (int W, int H, bool Hevc) Resolution => Quality switch
     {
         QualityPreset.Max4K => (3840, 2160, true),

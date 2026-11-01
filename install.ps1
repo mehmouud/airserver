@@ -87,15 +87,24 @@ Ok 'AirServer ajouté au menu Démarrer et aux Applications installées'
 # 5. réseau + pare-feu (admin, une seule demande UAC si besoin)
 Step 'Réseau et pare-feu'
 $admin = @()
-$hasRule = $false
+# Rules (same set as the app's "Autoriser dans le pare-feu" button):
+#  - Private/Domain: allow (home / office LAN)
+#  - Public, only from 192.168.137.0/24: the PC's own Windows Mobile Hotspot. Its interface has no
+#    network profile, so Windows treats it as Public; the subnet restriction keeps the receiver
+#    closed on café / hotel Wi-Fi.
+$HotspotSubnet = '192.168.137.0/24'
+$wanted = 'AirServer (TCP)', 'AirServer (UDP)', 'AirServer hotspot (TCP)', 'AirServer hotspot (UDP)'
+$okRules = @()
 try {
-    $hasRule = [bool](Get-NetFirewallApplicationFilter -Program $Engine -ErrorAction SilentlyContinue |
-        Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' -and $_.Action -eq 'Allow' -and $_.Direction -eq 'Inbound' })
+    $okRules = @(Get-NetFirewallRule -DisplayName 'AirServer*' -ErrorAction SilentlyContinue | Where-Object {
+        $_.Enabled -eq 'True' -and $_.Action -eq 'Allow' -and $_.Direction -eq 'Inbound' -and
+        (($_ | Get-NetFirewallApplicationFilter).Program -eq $Engine) } | ForEach-Object DisplayName)
 } catch { }
-if (-not $hasRule) {
+if (@($wanted | Where-Object { $okRules -notcontains $_ }).Count -gt 0) {
     $admin += "Get-NetFirewallRule -DisplayName 'AirServer*' -ErrorAction SilentlyContinue | Remove-NetFirewallRule"
     foreach ($proto in 'TCP', 'UDP') {
         $admin += "New-NetFirewallRule -DisplayName 'AirServer ($proto)' -Direction Inbound -Action Allow -Program '$Engine' -Protocol $proto -Profile Private,Domain | Out-Null"
+        $admin += "New-NetFirewallRule -DisplayName 'AirServer hotspot ($proto)' -Direction Inbound -Action Allow -Program '$Engine' -Protocol $proto -Profile Public -RemoteAddress $HotspotSubnet | Out-Null"
     }
 }
 $public = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.NetworkCategory -eq 'Public' -and $_.IPv4Connectivity -ne 'Disconnected' })

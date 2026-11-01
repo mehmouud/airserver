@@ -1,0 +1,316 @@
+diff --git a/lib/mdnsd/mdnsd.c b/lib/mdnsd/mdnsd.c
+index 97a1ba6..4751030 100644
+--- a/lib/mdnsd/mdnsd.c
++++ b/lib/mdnsd/mdnsd.c
+@@ -31,6 +31,7 @@
+ #define MDNS_MAX_PACKET 1500
+ #define MDNS_COMBINED_PACKET_MAX 1200
+ #define MDNS_TTL_HOST 120
++#define MDNS_MAX_IFACES4 8
+ 
+ #define DNS_TYPE_A 1
+ #define DNS_TYPE_AAAA 28
+@@ -59,11 +60,17 @@ struct mdnsd_s {
+     mdnsd_service_t airplay;
+     mdnsd_service_t raop;
+ 
++    /* ipv4_addr/sock_fd4 = the IPv4 interface currently being answered on
++     * (selected under the mutex by mdns_use_iface4_locked) */
+     uint32_t ipv4_addr;
+     unsigned char ipv6_addr[16];
+     unsigned int ipv6_scope_id;
+     int sock_fd4;
+     int sock_fd6;
++    /* one logical mDNS interface per usable IPv4 address (e.g. LAN + Windows Mobile Hotspot) */
++    uint32_t iface4_addr[MDNS_MAX_IFACES4];
++    int iface4_fd[MDNS_MAX_IFACES4];
++    int iface4_count;
+     int running;
+     thread_handle_t thread;
+     mutex_handle_t mutex;
+@@ -418,6 +425,74 @@ static uint32_t mdns_get_default_ipv4(void)
+     return addr;
+ }
+ 
++/*
++ * Lists the IPv4 addresses mDNS must answer on, default interface first.
++ * Windows: every adapter that is up, including ones without a gateway such as the
++ * "Microsoft Wi-Fi Direct Virtual Adapter" used by Mobile Hotspot (192.168.137.1),
++ * so that iPhones connected to the PC's hotspot can discover the receiver.
++ * Other platforms: unchanged (default interface only).
++ */
++static int mdns_get_ipv4_list(uint32_t *addrs, int max)
++{
++    int count = 0;
++    addrs[count++] = mdns_get_default_ipv4();
++#ifdef _WIN32
++    ULONG buflen = 15000;
++    PIP_ADAPTER_ADDRESSES pAddresses = (IP_ADAPTER_ADDRESSES *) malloc(buflen);
++    DWORD dwRetVal;
++
++    if (!pAddresses) {
++        return count;
++    }
++    dwRetVal = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, NULL, pAddresses, &buflen);
++    if (dwRetVal == ERROR_BUFFER_OVERFLOW) {
++        free(pAddresses);
++        pAddresses = (IP_ADAPTER_ADDRESSES *) malloc(buflen);
++        if (!pAddresses) {
++            return count;
++        }
++        dwRetVal = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST, NULL, pAddresses, &buflen);
++    }
++    if (dwRetVal == NO_ERROR) {
++        for (PIP_ADAPTER_ADDRESSES a = pAddresses; a && count < max; a = a->Next) {
++            if (a->OperStatus != IfOperStatusUp || a->IfType == IF_TYPE_SOFTWARE_LOOPBACK ||
++                wcsstr(a->Description, L"Hyper-V") || wcsstr(a->Description, L"WSL") ||
++                wcsstr(a->Description, L"vEthernet")) {
++                continue;
++            }
++            for (PIP_ADAPTER_UNICAST_ADDRESS u = a->FirstUnicastAddress; u && count < max; u = u->Next) {
++                uint32_t addr = ((struct sockaddr_in *) u->Address.lpSockaddr)->sin_addr.s_addr;
++                const unsigned char *b = (const unsigned char *) &addr;
++                int known = 0;
++                if (b[0] == 169 && b[1] == 254) {
++                    continue;   /* link-local (APIPA): adapter not really connected */
++                }
++                for (int i = 0; i < count; i++) {
++                    known |= (addrs[i] == addr);
++                }
++                if (!known) {
++                    addrs[count++] = addr;
++                }
++            }
++        }
++    }
++    free(pAddresses);
++    if (count > 1 && addrs[0] == 0) {   /* no default found: drop the INADDR_ANY placeholder */
++        memmove(addrs, addrs + 1, (size_t) (count - 1) * sizeof(*addrs));
++        count--;
++    }
++#else
++    (void) max;
++#endif
++    return count;
++}
++
++static void mdns_use_iface4_locked(mdnsd_t *mdnsd, int i)
++{
++    mdnsd->ipv4_addr = mdnsd->iface4_addr[i];
++    mdnsd->sock_fd4 = mdnsd->iface4_fd[i];
++}
++
+ static int mdns_get_default_ipv6(unsigned char addr[16], unsigned int *scope_id)
+ {
+ #ifdef WIN32
+@@ -506,7 +581,13 @@ static int mdns_open_socket4(uint32_t iface_addr)
+     memset(&addr, 0, sizeof(addr));
+     addr.sin_family = AF_INET;
+     addr.sin_port = htons(MDNS_PORT);
++#ifdef _WIN32
++    /* Windows: a socket bound to the interface address only receives that interface's
++     * multicast traffic, so every answer carries the A record of the interface it was asked on */
++    addr.sin_addr.s_addr = iface_addr ? iface_addr : htonl(INADDR_ANY);
++#else
+     addr.sin_addr.s_addr = htonl(INADDR_ANY);
++#endif
+ 
+     if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) == -1) {
+         int error = SOCKET_GET_ERROR();
+@@ -805,7 +886,10 @@ static void mdns_send_response_locked(mdnsd_t *mdnsd, int include_airplay,
+ 
+ static void mdns_announce_locked(mdnsd_t *mdnsd, uint32_t ttl)
+ {
+-    mdns_send_response_locked(mdnsd, 1, 1, 1, ttl, MDNS_FAMILY_IPV4, NULL);
++    for (int i = 0; i < mdnsd->iface4_count; i++) {
++        mdns_use_iface4_locked(mdnsd, i);
++        mdns_send_response_locked(mdnsd, 1, 1, 1, ttl, MDNS_FAMILY_IPV4, NULL);
++    }
+     mdns_send_response_locked(mdnsd, 1, 1, 1, ttl, MDNS_FAMILY_IPV6, NULL);
+ }
+ 
+@@ -858,7 +942,7 @@ static int mdns_question_matches_service(const mdnsd_t *mdnsd, const char *name,
+ 
+ static void mdns_handle_query(mdnsd_t *mdnsd, const unsigned char *bytes,
+                               size_t length, mdns_family_t family,
+-                              const void *from, int from_port)
++                              const void *from, int from_port, int iface4)
+ {
+     uint16_t flags;
+     uint16_t qdcount;
+@@ -880,6 +964,13 @@ static void mdns_handle_query(mdnsd_t *mdnsd, const unsigned char *bytes,
+     qdcount = mdns_read_u16(bytes + 4);
+ 
+     MUTEX_LOCK(mdnsd->mutex);
++    if (family == MDNS_FAMILY_IPV4) {
++        if (iface4 < 0 || iface4 >= mdnsd->iface4_count) {
++            MUTEX_UNLOCK(mdnsd->mutex);
++            return;
++        }
++        mdns_use_iface4_locked(mdnsd, iface4);   /* answer on, and about, the receiving interface */
++    }
+     for (uint16_t i = 0; i < qdcount; i++) {
+         char name[MDNSD_MAX_NAME];
+         uint16_t type;
+@@ -920,26 +1011,32 @@ static THREAD_RETVAL mdns_thread(void *arg)
+     for (;;) {
+         fd_set rfds;
+         struct timeval tv;
+-        int fd4;
++        int fd4[MDNS_MAX_IFACES4];
++        int n4;
+         int fd6;
+         int max_fd = -1;
+         int running;
+         int ret;
+ 
+         MUTEX_LOCK(mdnsd->mutex);
+-        fd4 = mdnsd->sock_fd4;
++        n4 = mdnsd->iface4_count;
++        for (int i = 0; i < n4; i++) {
++            fd4[i] = mdnsd->iface4_fd[i];
++        }
+         fd6 = mdnsd->sock_fd6;
+         running = mdnsd->running;
+         MUTEX_UNLOCK(mdnsd->mutex);
+ 
+-        if (!running || (fd4 == -1 && fd6 == -1)) {
++        if (!running || (n4 == 0 && fd6 == -1)) {
+             break;
+         }
+ 
+         FD_ZERO(&rfds);
+-        if (fd4 != -1) {
+-            FD_SET(fd4, &rfds);
+-            max_fd = fd4;
++        for (int i = 0; i < n4; i++) {
++            FD_SET(fd4[i], &rfds);
++            if (fd4[i] > max_fd) {
++                max_fd = fd4[i];
++            }
+         }
+         if (fd6 != -1) {
+             FD_SET(fd6, &rfds);
+@@ -951,15 +1048,18 @@ static THREAD_RETVAL mdns_thread(void *arg)
+         tv.tv_usec = 250000;
+ 
+         ret = select(max_fd + 1, &rfds, NULL, NULL, &tv);
+-        if (ret > 0 && fd4 != -1 && FD_ISSET(fd4, &rfds)) {
++        for (int i = 0; ret > 0 && i < n4; i++) {
++            if (!FD_ISSET(fd4[i], &rfds)) {
++                continue;
++            }
+             unsigned char buffer[MDNS_MAX_PACKET];
+             struct sockaddr_in from;
+             socklen_t from_len = sizeof(from);
+-            int received = (int) recvfrom(fd4, (char *) buffer, sizeof(buffer), 0,
++            int received = (int) recvfrom(fd4[i], (char *) buffer, sizeof(buffer), 0,
+                                           (struct sockaddr *) &from, &from_len);
+             if (received > 0) {
+                 mdns_handle_query(mdnsd, buffer, (size_t) received,
+-                                  MDNS_FAMILY_IPV4, &from, from.sin_port);
++                                  MDNS_FAMILY_IPV4, &from, from.sin_port, i);
+             }
+         }
+         if (ret > 0 && fd6 != -1 && FD_ISSET(fd6, &rfds)) {
+@@ -970,7 +1070,7 @@ static THREAD_RETVAL mdns_thread(void *arg)
+                                           (struct sockaddr *) &from, &from_len);
+             if (received > 0) {
+                 mdns_handle_query(mdnsd, buffer, (size_t) received,
+-                                  MDNS_FAMILY_IPV6, &from, from.sin6_port);
++                                  MDNS_FAMILY_IPV6, &from, from.sin6_port, -1);
+             }
+         }
+     }
+@@ -1035,12 +1135,25 @@ int mdnsd_start(mdnsd_t *mdnsd)
+     int error4 = 0;
+     int error6 = 0;
+ 
+-    mdnsd->ipv4_addr = mdns_get_default_ipv4();
++    uint32_t addrs[MDNS_MAX_IFACES4];
++    int n4 = mdns_get_ipv4_list(addrs, MDNS_MAX_IFACES4);
+     mdns_get_default_ipv6(mdnsd->ipv6_addr, &mdnsd->ipv6_scope_id);
+ 
+-    mdnsd->sock_fd4 = mdns_open_socket4(mdnsd->ipv4_addr);
+-    if (mdnsd->sock_fd4 < 0) {
+-        error4 = mdnsd->sock_fd4;
++    mdnsd->iface4_count = 0;
++    for (int i = 0; i < n4; i++) {
++        int fd = mdns_open_socket4(addrs[i]);
++        if (fd < 0) {
++            error4 = fd;
++            continue;
++        }
++        mdnsd->iface4_addr[mdnsd->iface4_count] = addrs[i];
++        mdnsd->iface4_fd[mdnsd->iface4_count] = fd;
++        mdnsd->iface4_count++;
++    }
++    if (mdnsd->iface4_count) {
++        mdns_use_iface4_locked(mdnsd, 0);
++    } else {
++        mdnsd->ipv4_addr = 0;
+         mdnsd->sock_fd4 = -1;
+     }
+ 
+@@ -1058,10 +1171,11 @@ int mdnsd_start(mdnsd_t *mdnsd)
+     mdnsd->running = 1;
+     THREAD_CREATE(mdnsd->thread, mdns_thread, mdnsd);
+     if (!mdnsd->thread) {
+-        if (mdnsd->sock_fd4 != -1) {
+-            CLOSESOCKET(mdnsd->sock_fd4);
+-            mdnsd->sock_fd4 = -1;
++        for (int i = 0; i < mdnsd->iface4_count; i++) {
++            CLOSESOCKET(mdnsd->iface4_fd[i]);
+         }
++        mdnsd->iface4_count = 0;
++        mdnsd->sock_fd4 = -1;
+         if (mdnsd->sock_fd6 != -1) {
+             CLOSESOCKET(mdnsd->sock_fd6);
+             mdnsd->sock_fd6 = -1;
+@@ -1077,7 +1191,8 @@ int mdnsd_start(mdnsd_t *mdnsd)
+ 
+ void mdnsd_stop(mdnsd_t *mdnsd)
+ {
+-    int fd4 = -1;
++    int fd4[MDNS_MAX_IFACES4];
++    int n4 = 0;
+     int fd6 = -1;
+     thread_handle_t thread = 0;
+ 
+@@ -1088,17 +1203,21 @@ void mdnsd_stop(mdnsd_t *mdnsd)
+     MUTEX_LOCK(mdnsd->mutex);
+     if (mdnsd->running) {
+         mdnsd->running = 0;
+-        fd4 = mdnsd->sock_fd4;
++        n4 = mdnsd->iface4_count;
++        for (int i = 0; i < n4; i++) {
++            fd4[i] = mdnsd->iface4_fd[i];
++        }
+         fd6 = mdnsd->sock_fd6;
+         thread = mdnsd->thread;
++        mdnsd->iface4_count = 0;
+         mdnsd->sock_fd4 = -1;
+         mdnsd->sock_fd6 = -1;
+         mdnsd->thread = 0;
+     }
+     MUTEX_UNLOCK(mdnsd->mutex);
+ 
+-    if (fd4 != -1) {
+-        CLOSESOCKET(fd4);
++    for (int i = 0; i < n4; i++) {
++        CLOSESOCKET(fd4[i]);
+     }
+     if (fd6 != -1) {
+         CLOSESOCKET(fd6);
+@@ -1147,7 +1266,10 @@ void mdnsd_goodbye(mdnsd_t *mdnsd, const mdnsd_service_t *service)
+     }
+ 
+     MUTEX_LOCK(mdnsd->mutex);
+-    mdns_send_service_locked(mdnsd, service, 0, 0, MDNS_FAMILY_IPV4, NULL);
++    for (int i = 0; i < mdnsd->iface4_count; i++) {
++        mdns_use_iface4_locked(mdnsd, i);
++        mdns_send_service_locked(mdnsd, service, 0, 0, MDNS_FAMILY_IPV4, NULL);
++    }
+     mdns_send_service_locked(mdnsd, service, 0, 0, MDNS_FAMILY_IPV6, NULL);
+     MUTEX_UNLOCK(mdnsd->mutex);
+ }
