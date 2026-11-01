@@ -10,6 +10,7 @@
     <AssemblyName>AirServer</AssemblyName>
     <RootNamespace>AirServer</RootNamespace>
     <Version>1.1.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <InvariantGlobalization>true</InvariantGlobalization>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon>app.ico</ApplicationIcon>
