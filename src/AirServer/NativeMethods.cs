@@ -38,6 +38,42 @@ internal static partial class NativeMethods
         return ok;
     }
 
+    // ---- window chrome (Windows 11: dark frame + rounded corners; ignored on Windows 10) -------
+
+    [LibraryImport("dwmapi.dll")]
+    private static partial int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWCP_ROUND = 2;
+
+    public static void ApplyDarkRoundedFrame(IntPtr hwnd)
+    {
+        int on = 1, round = DWMWCP_ROUND;
+        DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, sizeof(int));
+        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
+    }
+
+    [LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial IntPtr FindWindow(string? cls, string title);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ShowWindow(IntPtr hwnd, int cmd);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetForegroundWindow(IntPtr hwnd);
+
+    /// <summary>Second launch: bring the already running window to the front.</summary>
+    public static void ActivateExistingWindow(string title)
+    {
+        IntPtr h = FindWindow(null, title);
+        if (h == IntPtr.Zero) return;
+        ShowWindow(h, 9 /* SW_RESTORE */);
+        SetForegroundWindow(h);
+    }
+
     // ---- refresh rate of the primary display -------------------------------------------------
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

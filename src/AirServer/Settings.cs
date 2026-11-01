@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 
 namespace AirServer;
@@ -26,6 +27,8 @@ public sealed class Settings
     public bool LowLatency { get; set; }
     public bool Audio { get; set; } = true;
     public bool AutoStart { get; set; } = true;
+    /// <summary>Hidden option (Options avancées / Ctrl+Shift+D): engine log, raw stats, command line.</summary>
+    public bool ShowDiagnostics { get; set; }
 
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AirServer", "settings.json");
@@ -43,8 +46,13 @@ public sealed class Settings
         return new Settings();
     }
 
+    /// <summary>False in demo mode: never overwrite the user's real settings.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Persist { get; set; } = true;
+
     public void Save()
     {
+        if (!Persist) return;
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         File.WriteAllText(FilePath, JsonSerializer.Serialize(this, JsonOpts));
     }

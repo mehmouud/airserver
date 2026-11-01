@@ -18,7 +18,11 @@ Relancer la même commande = mise à jour.
 
 ## Utilisation
 iPhone : Centre de contrôle → Recopie de l'écran → nom du PC. Alt+Entrée dans la fenêtre vidéo = plein écran.
-PC et iPhone doivent être sur le même réseau (profil Windows **Privé**).
+L'iPhone doit être sur le même réseau que le PC (profil Windows **Privé**) ou connecté au **point d'accès mobile** du PC.
+
+- Réglages (⚙) : nom du PC, qualité (Maximale / Équilibrée / Compatibilité), fluidité, son, plein écran, démarrage.
+- Informations techniques (journal, statistiques, réseau) : **Réglages → Options avancées**, ou **Ctrl+Maj+D**.
+- `AirServer.exe --demo` : simule un iPhone pour tester l'interface sans appareil (ne modifie pas les réglages).
 
 ## Qualité : ce qui est réellement contrôlable
 - **Débit** : choisi par l'encodeur de l'iPhone, qui s'adapte en continu au réseau. Aucun récepteur AirPlay ne le pilote.

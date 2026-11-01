@@ -1,0 +1,510 @@
+<Window x:Class="AirServer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="AirServer" Width="1040" Height="700" MinWidth="900" MinHeight="620"
+        WindowStartupLocation="CenterScreen" WindowStyle="None" ResizeMode="CanResize"
+        Background="{StaticResource B.Bg0}" Foreground="{StaticResource B.Text}"
+        FontFamily="{StaticResource F.Ui}" Icon="app.ico"
+        TextOptions.TextFormattingMode="Display" UseLayoutRounding="True">
+
+  <WindowChrome.WindowChrome>
+    <WindowChrome CaptionHeight="52" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
+  </WindowChrome.WindowChrome>
+
+  <Window.Resources>
+    <!-- slow drifting aurora blobs -->
+    <Storyboard x:Key="AuroraStory" RepeatBehavior="Forever">
+      <DoubleAnimation Storyboard.TargetName="BlobA" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" From="-40" To="120" Duration="0:0:14" AutoReverse="True"><DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+      <DoubleAnimation Storyboard.TargetName="BlobA" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="-20" To="80" Duration="0:0:11" AutoReverse="True"><DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+      <DoubleAnimation Storyboard.TargetName="BlobB" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" From="60" To="-120" Duration="0:0:17" AutoReverse="True"><DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+      <DoubleAnimation Storyboard.TargetName="BlobB" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="0" To="110" Duration="0:0:13" AutoReverse="True"><DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+      <DoubleAnimation Storyboard.TargetName="BlobC" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" From="-80" To="90" Duration="0:0:19" AutoReverse="True"><DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+      <DoubleAnimation Storyboard.TargetName="BlobC" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="40" To="-70" Duration="0:0:15" AutoReverse="True"><DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction></DoubleAnimation>
+    </Storyboard>
+
+    <Storyboard x:Key="RingStory" RepeatBehavior="Forever">
+      <DoubleAnimation Storyboard.TargetName="RingRotate" Storyboard.TargetProperty="Angle" From="0" To="360" Duration="0:0:6"/>
+    </Storyboard>
+
+    <Storyboard x:Key="RippleStory" RepeatBehavior="Forever">
+      <DoubleAnimation Storyboard.TargetName="R1" Storyboard.TargetProperty="Opacity" From="0.75" To="0" Duration="0:0:2.7"/>
+      <DoubleAnimation Storyboard.TargetName="R1S" Storyboard.TargetProperty="ScaleX" From="0.62" To="1.3" Duration="0:0:2.7"/>
+      <DoubleAnimation Storyboard.TargetName="R1S" Storyboard.TargetProperty="ScaleY" From="0.62" To="1.3" Duration="0:0:2.7"/>
+      <DoubleAnimation Storyboard.TargetName="R2" Storyboard.TargetProperty="Opacity" From="0.75" To="0" Duration="0:0:2.7" BeginTime="0:0:0.9"/>
+      <DoubleAnimation Storyboard.TargetName="R2S" Storyboard.TargetProperty="ScaleX" From="0.62" To="1.3" Duration="0:0:2.7" BeginTime="0:0:0.9"/>
+      <DoubleAnimation Storyboard.TargetName="R2S" Storyboard.TargetProperty="ScaleY" From="0.62" To="1.3" Duration="0:0:2.7" BeginTime="0:0:0.9"/>
+      <DoubleAnimation Storyboard.TargetName="R3" Storyboard.TargetProperty="Opacity" From="0.75" To="0" Duration="0:0:2.7" BeginTime="0:0:1.8"/>
+      <DoubleAnimation Storyboard.TargetName="R3S" Storyboard.TargetProperty="ScaleX" From="0.62" To="1.3" Duration="0:0:2.7" BeginTime="0:0:1.8"/>
+      <DoubleAnimation Storyboard.TargetName="R3S" Storyboard.TargetProperty="ScaleY" From="0.62" To="1.3" Duration="0:0:2.7" BeginTime="0:0:1.8"/>
+    </Storyboard>
+
+    <Storyboard x:Key="LivePulse" RepeatBehavior="Forever" AutoReverse="True">
+      <DoubleAnimation Storyboard.TargetName="LiveDot" Storyboard.TargetProperty="Opacity" From="1" To="0.25" Duration="0:0:0.8"/>
+    </Storyboard>
+
+    <!-- small reusable bits -->
+    <Style x:Key="StepCard" TargetType="Border">
+      <Setter Property="CornerRadius" Value="16"/>
+      <Setter Property="Background" Value="#B3141725"/>
+      <Setter Property="BorderBrush" Value="{StaticResource B.Stroke}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="16,14"/>
+      <Setter Property="Width" Value="214"/>
+      <Setter Property="Margin" Value="7,0"/>
+    </Style>
+    <Style x:Key="StepNumber" TargetType="Border">
+      <Setter Property="Width" Value="28"/>
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="CornerRadius" Value="14"/>
+      <Setter Property="Background" Value="{StaticResource B.Accent}"/>
+      <Setter Property="Margin" Value="0,0,0,10"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+    </Style>
+    <Style x:Key="Chip" TargetType="Border">
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="Background" Value="#B3141725"/>
+      <Setter Property="BorderBrush" Value="{StaticResource B.Stroke}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="14,9"/>
+      <Setter Property="Margin" Value="5"/>
+    </Style>
+    <Style x:Key="SettingRow" TargetType="Grid">
+      <Setter Property="Margin" Value="0,0,0,16"/>
+    </Style>
+    <Style x:Key="Panel" TargetType="Border">
+      <Setter Property="CornerRadius" Value="14"/>
+      <Setter Property="Background" Value="{StaticResource B.Surface}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource B.Stroke}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="16"/>
+      <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+  </Window.Resources>
+
+  <Grid x:Name="Root" ClipToBounds="True">
+
+    <!-- ================= background: aurora ================= -->
+    <Canvas IsHitTestVisible="False">
+      <Ellipse x:Name="BlobA" Width="720" Height="720" Canvas.Left="-260" Canvas.Top="-300">
+        <Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform>
+        <Ellipse.Fill><RadialGradientBrush><GradientStop Color="#998B5CF6" Offset="0"/><GradientStop Color="#338B5CF6" Offset="0.45"/><GradientStop Color="#008B5CF6" Offset="1"/></RadialGradientBrush></Ellipse.Fill>
+      </Ellipse>
+      <Ellipse x:Name="BlobB" Width="680" Height="680" Canvas.Left="560" Canvas.Top="-260">
+        <Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform>
+        <Ellipse.Fill><RadialGradientBrush><GradientStop Color="#8022D3EE" Offset="0"/><GradientStop Color="#2622D3EE" Offset="0.5"/><GradientStop Color="#0022D3EE" Offset="1"/></RadialGradientBrush></Ellipse.Fill>
+      </Ellipse>
+      <Ellipse x:Name="BlobC" Width="760" Height="760" Canvas.Left="180" Canvas.Top="300">
+        <Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform>
+        <Ellipse.Fill><RadialGradientBrush><GradientStop Color="#70F472B6" Offset="0"/><GradientStop Color="#22F472B6" Offset="0.5"/><GradientStop Color="#00F472B6" Offset="1"/></RadialGradientBrush></Ellipse.Fill>
+      </Ellipse>
+    </Canvas>
+    <Rectangle IsHitTestVisible="False">
+      <Rectangle.Fill>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+          <GradientStop Color="#0007080D" Offset="0"/>
+          <GradientStop Color="#6607080D" Offset="0.7"/>
+          <GradientStop Color="#CC07080D" Offset="1"/>
+        </LinearGradientBrush>
+      </Rectangle.Fill>
+    </Rectangle>
+
+    <!-- ================= main layout ================= -->
+    <Grid x:Name="Shell">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="52"/>
+        <RowDefinition/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <!-- title bar -->
+      <Grid Grid.Row="0">
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+          <Image Source="app.ico" Width="22" Height="22" RenderOptions.BitmapScalingMode="HighQuality"/>
+          <TextBlock Text="AirServer" FontSize="15" FontWeight="SemiBold" Margin="10,0,0,0" VerticalAlignment="Center"/>
+          <Border x:Name="DemoBadge" Visibility="Collapsed" CornerRadius="6" Background="#33FBBF24" Padding="7,2" Margin="10,0,0,0" VerticalAlignment="Center">
+            <TextBlock Text="DÉMO" FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource B.Amber}"/>
+          </Border>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+          <Button x:Name="DiagButton" Style="{StaticResource Btn.Icon}" ToolTip="Informations techniques (Ctrl+Maj+D)" Margin="0,7,2,0" Visibility="Collapsed"
+                  WindowChrome.IsHitTestVisibleInChrome="True" Click="OnOpenDiagnostics">
+            <TextBlock Style="{StaticResource T.Icon}" Text="&#xEC7A;"/>
+          </Button>
+          <Button Style="{StaticResource Btn.Icon}" ToolTip="Réglages" Margin="0,7,10,0" WindowChrome.IsHitTestVisibleInChrome="True" Click="OnOpenSettings">
+            <TextBlock Style="{StaticResource T.Icon}" Text="&#xE713;" FontSize="17"/>
+          </Button>
+          <Button Style="{StaticResource Btn.Caption}" WindowChrome.IsHitTestVisibleInChrome="True" Click="OnMinimize" ToolTip="Réduire">
+            <TextBlock Style="{StaticResource T.Icon}" Text="&#xE921;" FontSize="10"/>
+          </Button>
+          <Button Style="{StaticResource Btn.Caption}" WindowChrome.IsHitTestVisibleInChrome="True" Click="OnMaximize" ToolTip="Agrandir">
+            <TextBlock x:Name="MaxGlyph" Style="{StaticResource T.Icon}" Text="&#xE922;" FontSize="10"/>
+          </Button>
+          <Button Style="{StaticResource Btn.CaptionClose}" WindowChrome.IsHitTestVisibleInChrome="True" Click="OnClose" ToolTip="Fermer">
+            <TextBlock Style="{StaticResource T.Icon}" Text="&#xE8BB;" FontSize="10"/>
+          </Button>
+        </StackPanel>
+      </Grid>
+
+      <!-- hero -->
+      <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24,0,24,10">
+
+        <!-- orb -->
+        <Grid Width="250" Height="250" HorizontalAlignment="Center">
+          <Grid x:Name="Ripples" IsHitTestVisible="False">
+            <Ellipse x:Name="R1" Opacity="0" StrokeThickness="2" RenderTransformOrigin="0.5,0.5" Stroke="{Binding Fill, ElementName=RippleFillSource}">
+              <Ellipse.RenderTransform><ScaleTransform x:Name="R1S"/></Ellipse.RenderTransform>
+            </Ellipse>
+            <Ellipse x:Name="R2" Opacity="0" StrokeThickness="2" RenderTransformOrigin="0.5,0.5" Stroke="{Binding Fill, ElementName=RippleFillSource}">
+              <Ellipse.RenderTransform><ScaleTransform x:Name="R2S"/></Ellipse.RenderTransform>
+            </Ellipse>
+            <Ellipse x:Name="R3" Opacity="0" StrokeThickness="2" RenderTransformOrigin="0.5,0.5" Stroke="{Binding Fill, ElementName=RippleFillSource}">
+              <Ellipse.RenderTransform><ScaleTransform x:Name="R3S"/></Ellipse.RenderTransform>
+            </Ellipse>
+          </Grid>
+          <!-- colour source shared by ripples/ring/glyph (stops animated from code) -->
+          <Rectangle x:Name="RippleFillSource" Visibility="Collapsed">
+            <Rectangle.Fill>
+              <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop x:Name="StopA" Color="#FF8B5CF6" Offset="0"/>
+                <GradientStop x:Name="StopB" Color="#FF22D3EE" Offset="1"/>
+              </LinearGradientBrush>
+            </Rectangle.Fill>
+          </Rectangle>
+          <!-- soft glow -->
+          <Ellipse Width="230" Height="230" IsHitTestVisible="False">
+            <Ellipse.Fill>
+              <RadialGradientBrush>
+                <GradientStop x:Name="GlowStop" Color="#558B5CF6" Offset="0.35"/>
+                <GradientStop Color="#008B5CF6" Offset="1"/>
+              </RadialGradientBrush>
+            </Ellipse.Fill>
+          </Ellipse>
+          <!-- rotating gradient ring -->
+          <Ellipse Width="178" Height="178" StrokeThickness="4" RenderTransformOrigin="0.5,0.5">
+            <Ellipse.RenderTransform><RotateTransform x:Name="RingRotate"/></Ellipse.RenderTransform>
+            <Ellipse.Stroke>
+              <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop x:Name="RingA" Color="#FF8B5CF6" Offset="0"/>
+                <GradientStop x:Name="RingB" Color="#FF22D3EE" Offset="0.55"/>
+                <GradientStop Color="#0022D3EE" Offset="1"/>
+              </LinearGradientBrush>
+            </Ellipse.Stroke>
+          </Ellipse>
+          <Ellipse Width="152" Height="152" Fill="{StaticResource B.Surface}" Stroke="{StaticResource B.Stroke}" StrokeThickness="1"/>
+          <TextBlock x:Name="OrbGlyph" Text="&#xE8EA;" FontFamily="{StaticResource F.Icons}" FontSize="56" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Foreground="{Binding Fill, ElementName=RippleFillSource}" RenderTransformOrigin="0.5,0.5">
+            <TextBlock.RenderTransform><ScaleTransform x:Name="GlyphScale"/></TextBlock.RenderTransform>
+          </TextBlock>
+        </Grid>
+
+        <!-- text block (cross-faded on state change) -->
+        <StackPanel x:Name="HeroText" HorizontalAlignment="Center" Margin="0,8,0,0">
+          <StackPanel.RenderTransform><TranslateTransform x:Name="HeroShift"/></StackPanel.RenderTransform>
+
+          <Border x:Name="LiveBadge" Visibility="Collapsed" HorizontalAlignment="Center" CornerRadius="11" Background="#2634D399" Padding="11,4" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal">
+              <Ellipse x:Name="LiveDot" Width="8" Height="8" Fill="{StaticResource B.Green}" VerticalAlignment="Center"/>
+              <TextBlock Text="EN DIRECT" FontSize="11.5" FontWeight="Bold" Foreground="{StaticResource B.Green}" Margin="7,0,0,0"/>
+            </StackPanel>
+          </Border>
+
+          <TextBlock x:Name="TitleText" Text="Prêt à recevoir" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center" TextAlignment="Center"/>
+          <TextBlock x:Name="SubtitleText" FontSize="15" Foreground="{StaticResource B.TextDim}" HorizontalAlignment="Center" TextAlignment="Center"
+                     TextWrapping="Wrap" MaxWidth="640" Margin="0,8,0,0"/>
+
+          <!-- waiting: 3 guided steps -->
+          <StackPanel x:Name="StepsPanel" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,28,0,0">
+            <Border Style="{StaticResource StepCard}">
+              <StackPanel>
+                <Border Style="{StaticResource StepNumber}"><TextBlock Text="1" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                <TextBlock Style="{StaticResource T.Label}" Text="Ouvrez le Centre de contrôle"/>
+                <TextBlock Style="{StaticResource T.Hint}" Text="Glissez depuis le coin supérieur droit de l'iPhone."/>
+              </StackPanel>
+            </Border>
+            <Border Style="{StaticResource StepCard}">
+              <StackPanel>
+                <Border Style="{StaticResource StepNumber}"><TextBlock Text="2" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                <TextBlock Style="{StaticResource T.Label}" Text="Touchez «&#xA0;Recopie de l'écran&#xA0;»"/>
+                <TextBlock Style="{StaticResource T.Hint}" Text="L'icône aux deux rectangles superposés."/>
+              </StackPanel>
+            </Border>
+            <Border Style="{StaticResource StepCard}">
+              <StackPanel>
+                <Border Style="{StaticResource StepNumber}"><TextBlock Text="3" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                <TextBlock Style="{StaticResource T.Label}" Text="Choisissez ce PC"/>
+                <TextBlock x:Name="StepName" Text="AirServer" FontSize="15" FontWeight="Bold" Foreground="{StaticResource B.AccentText}"
+                           TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
+                <TextBlock Style="{StaticResource T.Hint}" Text="La recopie démarre en quelques secondes."/>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+
+          <!-- mirroring: quality chips -->
+          <StackPanel x:Name="StreamPanel" Visibility="Collapsed" Margin="0,24,0,0" HorizontalAlignment="Center">
+            <WrapPanel x:Name="Chips" HorizontalAlignment="Center"/>
+            <TextBlock x:Name="QualityLine" FontSize="13.5" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+          </StackPanel>
+
+          <!-- stopped / error: call to action -->
+          <StackPanel x:Name="ActionPanel" Visibility="Collapsed" Margin="0,30,0,0" HorizontalAlignment="Center">
+            <Button x:Name="ActionButton" Style="{StaticResource Btn.Primary}" Click="OnAction" HorizontalAlignment="Center">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="ActionGlyph" Style="{StaticResource T.Icon}" Text="&#xE768;" Foreground="White" Margin="0,0,10,0"/>
+                <TextBlock x:Name="ActionText" Text="Activer la réception" Foreground="White"/>
+              </StackPanel>
+            </Button>
+          </StackPanel>
+        </StackPanel>
+      </StackPanel>
+
+      <!-- bottom bar -->
+      <Border Grid.Row="2" Background="#99090B12" BorderBrush="#1FFFFFFF" BorderThickness="0,1,0,0" Padding="22,12">
+        <Grid>
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="Visible sur" Foreground="{StaticResource B.TextFaint}" FontSize="13" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <ItemsControl x:Name="NetworkChips">
+              <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border CornerRadius="10" Background="{StaticResource B.Glass}" Padding="10,5" Margin="0,0,8,0" ToolTip="{Binding Address}">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="{Binding Glyph}" FontFamily="{StaticResource F.Icons}" FontSize="13" Foreground="{StaticResource B.Cyan}" VerticalAlignment="Center"/>
+                      <TextBlock Text="{Binding Label}" FontSize="13" Margin="7,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock x:Name="NoNetwork" Text="aucun réseau — connectez ce PC au Wi-Fi" Foreground="{StaticResource B.Amber}" FontSize="13" VerticalAlignment="Center" Visibility="Collapsed"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+            <TextBlock x:Name="PowerLabel" Text="Réception activée" FontSize="13.5" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <CheckBox x:Name="PowerSwitch" Style="{StaticResource Switch}" Checked="OnPowerChanged" Unchecked="OnPowerChanged"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ================= settings drawer ================= -->
+    <Grid x:Name="SettingsLayer" Visibility="Collapsed">
+      <Border x:Name="SettingsBackdrop" Background="#99000000" Opacity="0" MouseLeftButtonDown="OnCloseSettings"/>
+      <Border x:Name="SettingsPanel" Width="460" HorizontalAlignment="Right" Background="{StaticResource B.Bg1}" BorderBrush="{StaticResource B.Stroke}" BorderThickness="1,0,0,0">
+        <Border.RenderTransform><TranslateTransform x:Name="SettingsShift" X="460"/></Border.RenderTransform>
+        <Grid>
+          <Grid.RowDefinitions><RowDefinition Height="64"/><RowDefinition/></Grid.RowDefinitions>
+          <Grid Margin="26,0,14,0">
+            <TextBlock Text="Réglages" FontSize="22" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <Button Style="{StaticResource Btn.Icon}" HorizontalAlignment="Right" Click="OnCloseSettings" ToolTip="Fermer">
+              <TextBlock Style="{StaticResource T.Icon}" Text="&#xE8BB;" FontSize="12"/>
+            </Button>
+          </Grid>
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="26,0,26,26">
+            <StackPanel>
+              <TextBlock Style="{StaticResource T.Section}" Text="APPAREIL" Margin="2,4,0,10"/>
+              <TextBlock Style="{StaticResource T.Label}" Text="Nom de ce PC sur l'iPhone" Margin="0,0,0,8"/>
+              <TextBox x:Name="NameBox" Style="{StaticResource Input}" MaxLength="40"/>
+
+              <TextBlock Style="{StaticResource T.Section}" Text="QUALITÉ DE L'IMAGE"/>
+              <RadioButton x:Name="QMax" GroupName="Quality" Style="{StaticResource Card.Option}">
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource T.Label}" Text="Maximale" FontWeight="SemiBold"/>
+                    <Border CornerRadius="6" Background="{StaticResource B.Accent}" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="RECOMMANDÉ" FontSize="9.5" FontWeight="Bold" Foreground="White"/>
+                    </Border>
+                  </StackPanel>
+                  <TextBlock Style="{StaticResource T.Hint}" Text="Jusqu'à la 4K : l'image la plus nette. Idéal en Wi-Fi rapide ou sur le point d'accès du PC."/>
+                </StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="QBalanced" GroupName="Quality" Style="{StaticResource Card.Option}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource T.Label}" Text="Équilibrée" FontWeight="SemiBold"/>
+                  <TextBlock Style="{StaticResource T.Hint}" Text="Très bonne image, plus tolérante si le Wi-Fi est moyen."/>
+                </StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="QCompat" GroupName="Quality" Style="{StaticResource Card.Option}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource T.Label}" Text="Compatibilité" FontWeight="SemiBold"/>
+                  <TextBlock Style="{StaticResource T.Hint}" Text="Full HD. Pour les anciens iPhone ou si la recopie saccade."/>
+                </StackPanel>
+              </RadioButton>
+              <RadioButton x:Name="QCustom" GroupName="Quality" Style="{StaticResource Card.Option}" Visibility="Collapsed">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource T.Label}" Text="Personnalisée" FontWeight="SemiBold"/>
+                  <TextBlock Style="{StaticResource T.Hint}" Text="Définie dans les options avancées."/>
+                </StackPanel>
+              </RadioButton>
+
+              <Grid Style="{StaticResource SettingRow}" Margin="0,10,0,0">
+                <StackPanel VerticalAlignment="Center" Margin="0,0,150,0">
+                  <TextBlock Style="{StaticResource T.Label}" Text="Fluidité"/>
+                  <TextBlock Style="{StaticResource T.Hint}" Text="Nombre d'images par seconde demandé à l'iPhone."/>
+                </StackPanel>
+                <Border HorizontalAlignment="Right" VerticalAlignment="Center" CornerRadius="10" Background="{StaticResource B.Surface}" BorderBrush="{StaticResource B.Stroke}" BorderThickness="1" Padding="3">
+                  <StackPanel Orientation="Horizontal">
+                    <RadioButton x:Name="Fps30" GroupName="Fps" Style="{StaticResource Segment}" Content="30 i/s"/>
+                    <RadioButton x:Name="Fps60" GroupName="Fps" Style="{StaticResource Segment}" Content="60 i/s"/>
+                  </StackPanel>
+                </Border>
+              </Grid>
+
+              <TextBlock Style="{StaticResource T.Section}" Text="AFFICHAGE ET SON"/>
+              <Grid Style="{StaticResource SettingRow}">
+                <StackPanel Margin="0,0,64,0">
+                  <TextBlock Style="{StaticResource T.Label}" Text="Son de l'iPhone"/>
+                  <TextBlock Style="{StaticResource T.Hint}" Text="Jouer le son sur les haut-parleurs du PC."/>
+                </StackPanel>
+                <CheckBox x:Name="AudioSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+              <Grid Style="{StaticResource SettingRow}">
+                <StackPanel Margin="0,0,64,0">
+                  <TextBlock Style="{StaticResource T.Label}" Text="Ouvrir la vidéo en plein écran"/>
+                  <TextBlock Style="{StaticResource T.Hint}" Text="Alt + Entrée pour basculer à tout moment."/>
+                </StackPanel>
+                <CheckBox x:Name="FullscreenSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+              <Grid Style="{StaticResource SettingRow}">
+                <StackPanel Margin="0,0,64,0">
+                  <TextBlock Style="{StaticResource T.Label}" Text="Priorité à la réactivité"/>
+                  <TextBlock Style="{StaticResource T.Hint}" Text="Moins de délai pour les jeux et les présentations ; le son peut être légèrement décalé."/>
+                </StackPanel>
+                <CheckBox x:Name="LatencySwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+
+              <TextBlock Style="{StaticResource T.Section}" Text="DÉMARRAGE"/>
+              <Grid Style="{StaticResource SettingRow}">
+                <StackPanel Margin="0,0,64,0">
+                  <TextBlock Style="{StaticResource T.Label}" Text="Activer la réception à l'ouverture"/>
+                  <TextBlock Style="{StaticResource T.Hint}" Text="Votre iPhone trouve ce PC dès qu'AirServer est lancé."/>
+                </StackPanel>
+                <CheckBox x:Name="AutoStartSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+              </Grid>
+
+              <Border Height="1" Background="{StaticResource B.Stroke}" Margin="0,8,0,4"/>
+              <ToggleButton x:Name="AdvancedToggle" Style="{StaticResource Disclosure}" Content="Options avancées" FontSize="13.5" Checked="OnAdvancedToggled" Unchecked="OnAdvancedToggled"/>
+
+              <StackPanel x:Name="AdvancedPanel" Visibility="Collapsed" Margin="0,8,0,0">
+                <Grid Style="{StaticResource SettingRow}">
+                  <StackPanel Margin="0,0,64,0">
+                    <TextBlock Style="{StaticResource T.Label}" Text="Afficher les informations techniques"/>
+                    <TextBlock Style="{StaticResource T.Hint}" Text="Journal du récepteur, statistiques détaillées et réseau. Raccourci : Ctrl + Maj + D."/>
+                  </StackPanel>
+                  <CheckBox x:Name="DiagSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="OnDiagSwitch" Unchecked="OnDiagSwitch"/>
+                </Grid>
+
+                <Grid Style="{StaticResource SettingRow}">
+                  <StackPanel Margin="0,0,64,0">
+                    <TextBlock Style="{StaticResource T.Label}" Text="Résolution personnalisée"/>
+                    <TextBlock Style="{StaticResource T.Hint}" Text="Taille demandée à l'iPhone (il peut choisir moins)."/>
+                  </StackPanel>
+                  <CheckBox x:Name="CustomSwitch" Style="{StaticResource Switch}" HorizontalAlignment="Right" VerticalAlignment="Center" Checked="OnCustomSwitch" Unchecked="OnCustomSwitch"/>
+                </Grid>
+                <StackPanel x:Name="CustomPanel" Orientation="Horizontal" Margin="0,-6,0,16">
+                  <TextBox x:Name="CustomW" Style="{StaticResource Input}" Width="90" MaxLength="4"/>
+                  <TextBlock Text="×" Foreground="{StaticResource B.TextDim}" FontSize="16" VerticalAlignment="Center" Margin="10,0"/>
+                  <TextBox x:Name="CustomH" Style="{StaticResource Input}" Width="90" MaxLength="4"/>
+                  <TextBlock Text="HEVC" Style="{StaticResource T.Label}" VerticalAlignment="Center" Margin="22,0,10,0"/>
+                  <CheckBox x:Name="CustomHevc" Style="{StaticResource Switch}" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <Grid Style="{StaticResource SettingRow}">
+                  <StackPanel VerticalAlignment="Center" Margin="0,0,220,0">
+                    <TextBlock Style="{StaticResource T.Label}" Text="Moteur de rendu"/>
+                    <TextBlock Style="{StaticResource T.Hint}" Text="Changez si la vidéo ne s'affiche pas."/>
+                  </StackPanel>
+                  <Border HorizontalAlignment="Right" VerticalAlignment="Center" CornerRadius="10" Background="{StaticResource B.Surface}" BorderBrush="{StaticResource B.Stroke}" BorderThickness="1" Padding="3">
+                    <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="SinkD3D12" GroupName="Sink" Style="{StaticResource Segment}" Content="Direct3D 12"/>
+                      <RadioButton x:Name="SinkD3D11" GroupName="Sink" Style="{StaticResource Segment}" Content="Direct3D 11"/>
+                    </StackPanel>
+                  </Border>
+                </Grid>
+
+                <Button Style="{StaticResource Btn.Ghost}" HorizontalAlignment="Left" Click="OnRepairFirewall" Margin="0,2,0,0">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource T.Icon}" Text="&#xE83D;" FontSize="14" Foreground="{StaticResource B.Cyan}" Margin="0,0,9,0"/>
+                    <TextBlock Text="Réparer l'accès réseau (pare-feu)" FontSize="13.5"/>
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+
+              <TextBlock x:Name="VersionText" Foreground="{StaticResource B.TextFaint}" FontSize="12" Margin="2,26,0,0"/>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ================= technical page (hidden option) ================= -->
+    <Grid x:Name="DiagLayer" Visibility="Collapsed" Margin="0,52,0,0">
+      <Grid.Background>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+          <GradientStop Color="#FF0B0C14" Offset="0"/>
+          <GradientStop Color="#FF07080D" Offset="1"/>
+        </LinearGradientBrush>
+      </Grid.Background>
+      <Grid.RenderTransform><TranslateTransform x:Name="DiagShift"/></Grid.RenderTransform>
+      <Grid Margin="26,10,26,22">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+        <Grid Margin="0,0,0,16">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Style="{StaticResource T.Icon}" Text="&#xEC7A;" FontSize="20" Foreground="{StaticResource B.Cyan}"/>
+            <TextBlock Text="Informations techniques" FontSize="22" FontWeight="SemiBold" Margin="12,0,0,0"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Style="{StaticResource Btn.Ghost}" Click="OnCopyLog" Margin="0,0,8,0">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Style="{StaticResource T.Icon}" Text="&#xE8C8;" FontSize="13" Margin="0,0,8,0"/>
+                <TextBlock Text="Copier le journal" FontSize="13.5"/>
+              </StackPanel>
+            </Button>
+            <Button Style="{StaticResource Btn.Icon}" Click="OnCloseDiagnostics" ToolTip="Fermer (Échap)">
+              <TextBlock Style="{StaticResource T.Icon}" Text="&#xE8BB;" FontSize="12"/>
+            </Button>
+          </StackPanel>
+        </Grid>
+        <Grid Grid.Row="1">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="360"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
+            <StackPanel>
+              <Border Style="{StaticResource Panel}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource T.Section}" Text="SESSION" Margin="0,0,0,8"/>
+                  <TextBlock x:Name="DiagSession" FontFamily="{StaticResource F.Mono}" FontSize="12" Foreground="{StaticResource B.TextDim}" TextWrapping="Wrap"/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Panel}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource T.Section}" Text="STATISTIQUES ENVOYÉES PAR L'IPHONE" Margin="0,0,0,8"/>
+                  <TextBlock x:Name="DiagStats" FontFamily="{StaticResource F.Mono}" FontSize="12" Foreground="{StaticResource B.TextDim}" TextWrapping="Wrap"/>
+                </StackPanel>
+              </Border>
+              <Border Style="{StaticResource Panel}">
+                <StackPanel>
+                  <TextBlock Style="{StaticResource T.Section}" Text="RÉSEAU ET MOTEUR" Margin="0,0,0,8"/>
+                  <TextBlock x:Name="DiagEngine" FontFamily="{StaticResource F.Mono}" FontSize="12" Foreground="{StaticResource B.TextDim}" TextWrapping="Wrap"/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+          <Border Grid.Column="1" CornerRadius="14" Background="#FF05060A" BorderBrush="{StaticResource B.Stroke}" BorderThickness="1">
+            <TextBox x:Name="LogBox" IsReadOnly="True" Background="Transparent" BorderThickness="0" Foreground="#FFB7C0DD"
+                     FontFamily="{StaticResource F.Mono}" FontSize="12" Padding="14" TextWrapping="NoWrap"
+                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" SelectionBrush="{StaticResource B.Violet}"/>
+          </Border>
+        </Grid>
+      </Grid>
+    </Grid>
+
+    <!-- ================= toast ================= -->
+    <Border x:Name="Toast" Visibility="Collapsed" Opacity="0" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,84"
+            CornerRadius="14" Background="{StaticResource B.Surface2}" BorderBrush="{StaticResource B.Stroke}" BorderThickness="1" Padding="16,11" IsHitTestVisible="False">
+      <Border.RenderTransform><TranslateTransform x:Name="ToastShift" Y="20"/></Border.RenderTransform>
+      <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.5"/></Border.Effect>
+      <StackPanel Orientation="Horizontal">
+        <TextBlock Style="{StaticResource T.Icon}" Text="&#xE946;" Foreground="{StaticResource B.Cyan}" Margin="0,0,10,0"/>
+        <TextBlock x:Name="ToastText" FontSize="13.5"/>
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>
