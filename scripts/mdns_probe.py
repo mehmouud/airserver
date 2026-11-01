@@ -30,6 +30,8 @@ for s in services:
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 255)
+if len(sys.argv) > 2:   # optional: outgoing interface IPv4 (avoid VirtualBox/VPN adapters)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(sys.argv[2]))
 sock.bind(("", 0))
 sock.settimeout(0.5)
 found = set()
