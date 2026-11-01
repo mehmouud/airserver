@@ -47,9 +47,9 @@ $zip = Join-Path $tmp 'AirServer-win-x64.zip'
 try {
     if (Test-Path $ZipUrl) { Copy-Item $ZipUrl $zip } else { Invoke-WebRequest -UseBasicParsing -Uri $ZipUrl -OutFile $zip }
     $shaSrc = "$ZipUrl.sha256"
-    $expected = if (Test-Path $shaSrc) { Get-Content $shaSrc -Raw } else { (Invoke-WebRequest -UseBasicParsing -Uri $shaSrc).Content }
-    if ($expected -is [byte[]]) { $expected = [Text.Encoding]::ASCII.GetString($expected) }
-    $expected = ($expected -split '\s+')[0].Trim().ToLower()
+    # WebClient.DownloadString always returns text (iwr .Content is byte[] for octet-stream in PS 5.1)
+    [string]$shaText = if (Test-Path $shaSrc) { Get-Content $shaSrc -Raw } else { (New-Object Net.WebClient).DownloadString($shaSrc) }
+    $expected = ($shaText.Trim() -split '\s+')[0].ToLower()
     $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
     if ($expected -ne $actual) { throw "Somme SHA-256 invalide (attendu $expected, obtenu $actual)" }
     Ok ("{0:N0} Mo, SHA-256 vérifié" -f ((Get-Item $zip).Length / 1MB))
