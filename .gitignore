@@ -1,0 +1,9 @@
+build/
+dist/
+release/
+vendor/
+bin/
+obj/
+.vs/
+*.user
+tasks/

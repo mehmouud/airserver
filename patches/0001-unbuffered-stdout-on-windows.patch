@@ -1,0 +1,11 @@
+--- a/uxplay.cpp
++++ b/uxplay.cpp
+@@ -3379,5 +3379,8 @@
+ #ifdef _WIN32
++    /* AirServer GUI: stdout is a pipe -> make it unbuffered so log lines arrive in real time */
++    setvbuf(stdout, NULL, _IONBF, 0);
++    setvbuf(stderr, NULL, _IONBF, 0);
+     /* initialise Windows kernel qpc frequency for recv timestamping */
+     ntp_global_init();
+ #endif
+

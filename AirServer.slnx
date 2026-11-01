@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AirServer/AirServer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AirServer.Tests/AirServer.Tests.csproj" />
+  </Folder>
+</Solution>
